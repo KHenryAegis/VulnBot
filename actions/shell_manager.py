@@ -8,6 +8,9 @@ class ShellManager:
     _instance = None
     _ssh_client = None
     _shell = None
+    # Timeout (in seconds) applied to each command execution. Can be overridden
+    # before the first connection (e.g. from the CLI) via `ShellManager.command_timeout = ...`.
+    command_timeout = 120
 
     @classmethod
     def get_instance(cls):
@@ -31,7 +34,7 @@ class ShellManager:
                 port=Configs.basic_config.kali['port']
             )
         if self._shell is None:
-            self._shell = RemoteShell(self._ssh_client.invoke_shell())
+            self._shell = RemoteShell(self._ssh_client.invoke_shell(), command_timeout=self.command_timeout)
 
     def close(self):
         if self._shell:

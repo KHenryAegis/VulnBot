@@ -80,8 +80,9 @@ class RemoteShell:
 
     FORBIDDEN_COMMANDS = {'apt', 'apt-get'}
 
-    def __init__(self, shell: paramiko.Channel, timeout: float = 120.0):
+    def __init__(self, shell: paramiko.Channel, timeout: float = 120.0, command_timeout: float = 120.0):
         self.shell = shell
+        self.command_timeout = command_timeout
         self._setup_shell(timeout)
 
     def _setup_shell(self, timeout: float) -> None:
@@ -138,7 +139,7 @@ class RemoteShell:
         output = []
 
         time.sleep(.5)
-        data = SSHOutputHandler.receive_data(self.shell, timeout=120.0)
+        data = SSHOutputHandler.receive_data(self.shell, timeout=self.command_timeout)
         if data != '':
             output.append(data)
         last_line = data.strip().split('\n')[-1]
@@ -147,7 +148,7 @@ class RemoteShell:
                ['[y/n]', '[Y/n/q]', 'yes/no/[fingerprint]', '(yes/no)']):
             self.shell.send("yes\n")
             time.sleep(.5)
-            data = SSHOutputHandler.receive_data(self.shell, timeout=120.0)
+            data = SSHOutputHandler.receive_data(self.shell, timeout=self.command_timeout)
             if data != '':
                 output.append(data)
 
