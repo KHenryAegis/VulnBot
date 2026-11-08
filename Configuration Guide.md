@@ -77,5 +77,14 @@ Defines settings for the language model.
   - `temperature`: Model temperature.
   - `history_len`: Length of conversation history.
   - `timeout`: Timeout value for requests.
+  - `max_tokens`: Upper bound on the tokens of one reply (default `8192`; `0` sends no limit). A reply that reaches the limit raises an error instead of being parsed as complete.
+  - `max_retries`: Attempts per request for transient endpoint failures such as dropped connections, timeouts, and HTTP 408/409/429/5xx (default `3`, with exponential backoff).
+  - `max_plan_attempts`: Attempts to obtain a usable plan from the model before the run stops (default `3`). After an empty, truncated, blocked, or invalid reply the model is asked again with the reason.
+  - `max_plan_tasks`: Largest task list accepted from the model (default `30`; the plan prompt asks for 1 to 5 tasks).
   - `proxies`: Proxy settings for API requests.
 
+## Failure behavior
+
+When the endpoint cannot be reached or returns an error after the retries, or the model gives no usable plan, the run stops: the session is saved, the error is printed, and the process exits with status 1. The error text is never passed on as if the model had written it.
+
+An empty reply to a plan *update* is a valid answer and means that no task remains for the current stage.

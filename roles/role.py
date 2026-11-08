@@ -9,6 +9,7 @@ from db.repository.plan_repository import get_planner_by_id, add_plan_to_db
 from db.repository.task_repository import add_task_to_plan
 from prompts.prompt import DeepPentestPrompt
 from server.chat.chat import _chat
+from server.chat.errors import EmptyPlanError, LLMError, PlanParseError
 from utils.log_common import build_logger
 
 logger = build_logger()
@@ -51,6 +52,9 @@ class Role(BaseModel):
                 result.response = response
 
             return self.planner.update_plan(result.response)
+        except (LLMError, PlanParseError):
+            # The endpoint failed or the plan is unusable: stop the run instead of ending it quietly.
+            raise
         except Exception as e:
             print(e)
             print(traceback.format_exc())
@@ -71,7 +75,7 @@ class Role(BaseModel):
                     (text_1, self.react_chat_id) = _chat(query=self.prompt.init_reasoning_prompt)
                 except Exception as e:
                     self.console.print(f"Failed to initialize chat sessions: {e}", style="bold red")
-                    return None
+                    raise
             plan = Plan(goal=self.goal, plan_chat_id=self.plan_chat_id, react_chat_id=self.react_chat_id, current_task_sequence=0)
             plan = add_plan_to_db(plan)
             self.console.print("Plan Initialized.", style="bold green")
@@ -83,6 +87,8 @@ class Role(BaseModel):
 
     def run(self, session):
         next_task = self._plan(session)
+        if next_task is None:
+            raise EmptyPlanError(f"The {self.name} plan has no task to execute.")
         while self.chat_counter < self.max_interactions:
             next_task = self._react(next_task)
             if next_task is None:

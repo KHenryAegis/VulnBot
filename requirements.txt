@@ -43,3 +43,4 @@ tqdm==4.66.4
 transformers==4.46.1
 unstructured==0.16.4
 uvicorn==0.32.0
+tenacity>=8.2.3,<10

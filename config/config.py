@@ -134,6 +134,14 @@ class LLMConfig(BaseFileSettings):
     temperature: float = 0.5
     history_len: int = 5
     timeout: int = 600
+    # Upper bound on the tokens of one reply (0 sends no limit). A reply that reaches it raises LLMTruncated.
+    max_tokens: int = 8192
+    # Attempts per request for transient endpoint failures (connection errors, timeouts, 408/409/429/5xx).
+    max_retries: int = 3
+    # Attempts to obtain a usable plan from the model before the run stops.
+    max_plan_attempts: int = 3
+    # Largest task list accepted from the model. The plan prompt asks for 1 to 5 tasks.
+    max_plan_tasks: int = 30
     proxies: Dict[str, str] = dataclasses.field(default_factory=dict)
 
 

@@ -75,6 +75,15 @@ class DeepPentestPrompt:
     summary_result: str = """You are an autonomous agent responsible for summarizing the output of tools running on Kali Linux 2023.
     Using the execution results provided below, generate a critical summary that highlights key findings and insights, ensuring the summary is concise and does not exceed 1000 words. \n"""
 
+    repair_plan: str = """Your previous reply could not be used: {reason}
+    Reply again with the complete task list as a JSON list, wrapped in <json></json> tags, and no other text.
+    """
+
+    repair_plan_update: str = """Your previous reply could not be used: {reason}
+    Reply again with the complete revised task list as a JSON list, wrapped in <json></json> tags, and no other text.
+    If no task is applicable for this stage, reply with <json>[]</json>.
+    """
+
     update_plan: str = """You are required to revise the plan based on the provided execution details:
     - **Maintain the existing JSON structure**. 
     - The **Successful Tasks** in the **Finished Tasks** must be retained in the plan.

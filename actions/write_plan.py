@@ -1,9 +1,8 @@
-import json
-import re
 from typing import List, Dict
 
 from pydantic import BaseModel
 
+from actions.plan_schema import get_valid_plan, parse_plan_json
 from config.config import Configs
 from prompts.prompt import DeepPentestPrompt
 from db.models.plan_model import Plan
@@ -14,58 +13,56 @@ from server.chat.chat import _chat
 class WritePlan(BaseModel):
     plan_chat_id: str
 
-    def run(self, init_description) -> str:
-        rsp = _chat(query=DeepPentestPrompt.write_plan, conversation_id=self.plan_chat_id, kb_name=Configs.kb_config.kb_name, kb_query=init_description)
+    def _plan_limits(self) -> dict:
+        llm = Configs.llm_config
+        return dict(attempts=llm.max_plan_attempts, max_tasks=llm.max_plan_tasks)
 
-        match = re.search(r'<json>(.*?)</json>', rsp, re.DOTALL)
-        if match:
-            code = match.group(1)
-            return code
+    def run(self, init_description) -> str:
+        """Ask for the initial plan; return its JSON text. Raises PlanParseError if no usable plan arrives."""
+        def ask(feedback):
+            if feedback is None:
+                return _chat(query=DeepPentestPrompt.write_plan, conversation_id=self.plan_chat_id,
+                             kb_name=Configs.kb_config.kb_name, kb_query=init_description)
+            return _chat(query=feedback, conversation_id=self.plan_chat_id)
+
+        return get_valid_plan(ask, DeepPentestPrompt.repair_plan, **self._plan_limits())
 
     def update(self, task_result, success_task, fail_task, init_description) -> str:
-        rsp = _chat(
-            query=DeepPentestPrompt.update_plan.format(current_task=task_result.instruction,
-                                                      init_description=init_description,
-                                                      current_code=task_result.code,
-                                                      task_result=task_result.result,
-                                                      success_task=success_task,
-                                                      fail_task=fail_task),
-            conversation_id=self.plan_chat_id,
-            kb_name=Configs.kb_config.kb_name,
-            kb_query=task_result.instruction
-        )
-        if rsp == "":
-            return rsp
+        """Ask for the revised plan; return its JSON text.
 
-        match = re.search(r'<json>(.*?)</json>', rsp, re.DOTALL)
-        if match:
-            code = match.group(1)
-            return code
+        Returns "" when the model reports that no task remains for this stage (an empty reply or list),
+        which is the answer the update prompt asks for in that case.
+        """
+        def ask(feedback):
+            if feedback is None:
+                return _chat(
+                    query=DeepPentestPrompt.update_plan.format(current_task=task_result.instruction,
+                                                              init_description=init_description,
+                                                              current_code=task_result.code,
+                                                              task_result=task_result.result,
+                                                              success_task=success_task,
+                                                              fail_task=fail_task),
+                    conversation_id=self.plan_chat_id,
+                    kb_name=Configs.kb_config.kb_name,
+                    kb_query=task_result.instruction,
+                    allow_empty=True,
+                )
+            return _chat(query=feedback, conversation_id=self.plan_chat_id, allow_empty=True)
+
+        return get_valid_plan(ask, DeepPentestPrompt.repair_plan_update, allow_empty=True, **self._plan_limits())
 
 
 def parse_tasks(response: str, current_plan: Plan):
-    response = json.loads(response)
-
-    tasks = import_tasks_from_json(current_plan.id, response)
+    tasks = import_tasks_from_json(current_plan.id, parse_plan_json(response))
 
     current_plan.tasks = tasks
 
     return current_plan
 
-def preprocess_json_string(json_str):
-     # Use a regular expression to find invalid escape sequences
-    json_str = re.sub(r'\\([@!])', r'\\\\\1', json_str)
-
-    return json_str
 
 def merge_tasks(response: str, current_plan: Plan):
 
-    # Preprocess the input JSON string
-    processed_response = preprocess_json_string(response)
-
-    response = json.loads(processed_response)
-
-    tasks = merge_tasks_from_json(current_plan.id, response, current_plan.tasks)
+    tasks = merge_tasks_from_json(current_plan.id, parse_plan_json(response), current_plan.tasks)
 
     current_plan.tasks = tasks
 
@@ -81,7 +78,7 @@ def import_tasks_from_json(plan_id: str, tasks_json: List[Dict]) -> List[TaskMod
             action=task_data['action'],
             instruction=task_data['instruction'],
             dependencies=[i for i, t in enumerate(tasks_json)
-                          if t['id'] in task_data['dependent_task_ids']]
+                          if i != idx and t['id'] in task_data['dependent_task_ids']]
         )
 
         tasks.append(task)
